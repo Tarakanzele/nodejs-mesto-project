@@ -1,8 +1,5 @@
-import mongoose, {
-  Document,
-  Schema,
-  Types,
-} from 'mongoose';
+import mongoose, { Document, Schema, Types } from 'mongoose';
+import { urlRegex } from '../utils/url';
 
 export interface ICard extends Document {
   name: string;
@@ -22,16 +19,20 @@ const cardSchema = new Schema<ICard>({
   link: {
     type: String,
     required: true,
+    validate: {
+      validator: (url: string) => urlRegex.test(url),
+      message: 'Некорректный URL',
+    },
   },
   owner: {
     type: Schema.Types.ObjectId,
     required: true,
-    ref: 'user',
+    ref: 'User',
   },
   likes: {
     type: [Schema.Types.ObjectId],
     default: [],
-    ref: 'user',
+    ref: 'User',
   },
   createdAt: {
     type: Date,
@@ -39,4 +40,4 @@ const cardSchema = new Schema<ICard>({
   },
 });
 
-export default mongoose.model<ICard>('card', cardSchema);
+export default mongoose.model<ICard>('Card', cardSchema);

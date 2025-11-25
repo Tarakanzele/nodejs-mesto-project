@@ -1,70 +1,85 @@
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import Card from '../models/card';
-import { RequestWithUser } from '../types';
+import { HttpError } from '../errors/http-error';
+import { STATUS_CODES } from '../constants/status-codes';
 
-export const getCards = async (req: Request, res: Response) => {
+// -------------------------
+// Получить все карточки
+// -------------------------
+export const getCards = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const cards = await Card.find({});
-    return res.send(cards);
+    res.send(cards);
   } catch (err) {
-    return res.status(500).send({ message: 'На сервере произошла ошибка' });
+    next(err);
   }
 };
 
-export const createCard = async (req: RequestWithUser, res: Response) => {
-  const { name, link } = req.body;
-  const owner = req.user._id;
-
+// -------------------------
+// Создать карточку
+// -------------------------
+export const createCard = async (req: Request, res: Response, next: NextFunction) => {
   try {
+    if (!req.user) {
+      return next(new HttpError(STATUS_CODES.UNAUTHORIZED, 'Необходима авторизация'));
+    }
+
+    const { name, link } = req.body;
+
     const card = await Card.create({
       name,
       link,
-      owner,
+      owner: req.user._id,
     });
 
-    return res.status(201).send(card);
+    res.status(STATUS_CODES.CREATED).send(card);
   } catch (err: any) {
     if (err.name === 'ValidationError') {
-      return res.status(400).send({
-        message: 'Переданы некорректные данные при создании карточки',
-      });
+      return next(new HttpError(STATUS_CODES.BAD_REQUEST, 'Неверные данные карточки'));
     }
-
-    return res.status(500).send({ message: 'На сервере произошла ошибка' });
+    next(err);
   }
 };
 
-export const deleteCard = async (req: RequestWithUser, res: Response) => {
+// -------------------------
+// Удалить карточку
+// -------------------------
+export const deleteCard = async (req: Request, res: Response, next: NextFunction) => {
   try {
+    if (!req.user) {
+      return next(new HttpError(STATUS_CODES.UNAUTHORIZED, 'Необходима авторизация'));
+    }
+
     const card = await Card.findById(req.params.cardId);
 
     if (!card) {
-      return res.status(404).send({
-        message: 'Карточка с указанным _id не найдена',
-      });
+      return next(new HttpError(STATUS_CODES.NOT_FOUND, 'Карточка не найдена'));
     }
 
     if (card.owner.toString() !== req.user._id) {
-      return res.status(403).send({
-        message: 'Недостаточно прав для удаления данной карточки',
-      });
+      return next(new HttpError(STATUS_CODES.FORBIDDEN, 'Нельзя удалить чужую карточку'));
     }
 
-    const deletedCard = await Card.findByIdAndDelete(req.params.cardId);
-    return res.send(deletedCard);
+    const removed = await Card.findByIdAndDelete(req.params.cardId);
+
+    res.send(removed);
   } catch (err: any) {
     if (err.name === 'CastError') {
-      return res.status(400).send({
-        message: 'Передан некорректный _id карточки',
-      });
+      return next(new HttpError(STATUS_CODES.BAD_REQUEST, 'Некорректный ID карточки'));
     }
-
-    return res.status(500).send({ message: 'На сервере произошла ошибка' });
+    next(err);
   }
 };
 
-export const likeCard = async (req: RequestWithUser, res: Response) => {
+// -------------------------
+// Поставить лайк
+// -------------------------
+export const likeCard = async (req: Request, res: Response, next: NextFunction) => {
   try {
+    if (!req.user) {
+      return next(new HttpError(STATUS_CODES.UNAUTHORIZED, 'Необходима авторизация'));
+    }
+
     const card = await Card.findByIdAndUpdate(
       req.params.cardId,
       { $addToSet: { likes: req.user._id } },
@@ -72,25 +87,27 @@ export const likeCard = async (req: RequestWithUser, res: Response) => {
     );
 
     if (!card) {
-      return res.status(404).send({
-        message: 'Передан несуществующий _id карточки',
-      });
+      return next(new HttpError(STATUS_CODES.NOT_FOUND, 'Карточка не найдена'));
     }
 
-    return res.send(card);
+    res.send(card);
   } catch (err: any) {
     if (err.name === 'CastError') {
-      return res.status(400).send({
-        message: 'Переданы некорректные данные для постановки лайка или некорректный _id карточки',
-      });
+      return next(new HttpError(STATUS_CODES.BAD_REQUEST, 'Некорректный ID карточки'));
     }
-
-    return res.status(500).send({ message: 'На сервере произошла ошибка' });
+    next(err);
   }
 };
 
-export const dislikeCard = async (req: RequestWithUser, res: Response) => {
+// -------------------------
+// Удалить лайк
+// -------------------------
+export const dislikeCard = async (req: Request, res: Response, next: NextFunction) => {
   try {
+    if (!req.user) {
+      return next(new HttpError(STATUS_CODES.UNAUTHORIZED, 'Необходима авторизация'));
+    }
+
     const card = await Card.findByIdAndUpdate(
       req.params.cardId,
       { $pull: { likes: req.user._id } },
@@ -98,19 +115,14 @@ export const dislikeCard = async (req: RequestWithUser, res: Response) => {
     );
 
     if (!card) {
-      return res.status(404).send({
-        message: 'Передан несуществующий _id карточки',
-      });
+      return next(new HttpError(STATUS_CODES.NOT_FOUND, 'Карточка не найдена'));
     }
 
-    return res.send(card);
+    res.send(card);
   } catch (err: any) {
     if (err.name === 'CastError') {
-      return res.status(400).send({
-        message: 'Переданы некорректные данные для снятия лайка или некорректный _id карточки',
-      });
+      return next(new HttpError(STATUS_CODES.BAD_REQUEST, 'Некорректный ID карточки'));
     }
-
-    return res.status(500).send({ message: 'На сервере произошла ошибка' });
+    next(err);
   }
 };

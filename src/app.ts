@@ -1,35 +1,48 @@
-import express, { Request, Response, NextFunction } from 'express';
+import express from 'express';
 import mongoose from 'mongoose';
+import cookieParser from 'cookie-parser';
 import mainRouter from './routes/index';
-import { RequestWithUser } from './types';
+import { requestLogger } from './middlewares/request-logger';
+import { errorLogger } from './middlewares/error-logger';
+import auth from './middlewares/auth';
+import errorHandler from './errors/error-handler';
+import { validateSignup, validateSignin } from './middlewares/validators';
+import { createUser, login } from './controllers/users';
+import { errors } from 'celebrate';
 
 const { PORT = 3000 } = process.env;
 
 const app = express();
 
 app.use(express.json());
+app.use(cookieParser());
 
-app.use((req: Request, res: Response, next: NextFunction) => {
-  (req as RequestWithUser).user = {
-    _id: '6924766a9dbb1d6291809312',
-  };
+// Логирование запросов
+app.use(requestLogger);
 
-  next();
-});
+// Открытые руты
+app.post('/signup', validateSignup, createUser);
+app.post('/signin', validateSignin, login);
 
+// Авторизация
+app.use(auth);
+
+// Защищённые руты
 app.use('/', mainRouter);
 
-app.use((req: Request, res: Response) => {
-  res.status(404).send({ message: 'Страница не найдена' });
-});
+// Логирование ошибок
+app.use(errorLogger);
 
-mongoose.connect('mongodb://localhost:27017/mestodb')
+// Celebrate ошибки
+app.use(errors());
+
+// Централизованный обработчик ошибок
+app.use(errorHandler);
+
+mongoose
+  .connect('mongodb://localhost:27017/mestodb')
   .then(() => {
     console.log('MongoDB connected');
-    app.listen(PORT, () => {
-      console.log(`Server listening on port ${PORT}`);
-    });
+    app.listen(PORT, () => console.log(`Server running on ${PORT}`));
   })
-  .catch((err) => {
-    console.error('MongoDB connection error:', err);
-  });
+  .catch(console.error);

@@ -1,7 +1,9 @@
 import { Request } from 'express';
 
-export interface RequestWithUser extends Request {
-  user: {
-    _id: string;
-  };
+declare module 'express-serve-static-core' {
+  interface Request {
+    user?: {
+      _id: string;
+    };
+  }
 }
